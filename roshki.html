@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Roshki On The Run</title>
+
+	<link href="roshki.css" rel="stylesheet" type="text/css" />
+
+	<script src="assets/preloadjs-NEXT.min.js"></script>
+
+	<script type="text/javascript" src="easeljs/utils/UID.js"></script>
+	<script type="text/javascript" src="easeljs/geom/Matrix2D.js"></script>
+	<script type="text/javascript" src="easeljs/events/EventDispatcher.js"></script>
+	<script type="text/javascript" src="easeljs/display/DisplayObject.js"></script>
+	<script type="text/javascript" src="easeljs/display/Container.js"></script>
+	<script type="text/javascript" src="easeljs/display/Stage.js"></script>
+	<script type="text/javascript" src="easeljs/events/MouseEvent.js"></script>
+	<script type="text/javascript" src="easeljs/display/Shape.js"></script>
+	<script type="text/javascript" src="easeljs/display/Graphics.js"></script>
+	<script type="text/javascript" src="easeljs/utils/Ticker.js"></script>
+	<script type="text/javascript" src="easeljs/display/SpriteSheet.js"></script>
+	<script type="text/javascript" src="easeljs/display/Bitmap.js"></script>
+	<script type="text/javascript" src="easeljs/display/BitmapAnimation.js"></script>
+	<script type="text/javascript" src="easeljs/geom/Rectangle.js"></script>
+	<script type = "text/javascript" src = "Item.js"></script>
+	<script type = "text/javascript" src = "EnergyBar.js"></script>
+	<script type = "text/javascript" src = "Roshki.js"></script>
+		<script type="text/javascript" src="terrain.js"></script>
+	<script type="text/javascript" src="easeljs/display/Text.js"></script>
+
+	<!-- We also provide hosted minified versions of all CreateJS libraries.
+	  http://code.createjs.com -->
+
+	<script type="text/javascript">
+
+	var assets;
+	var stage;
+	var w, h;
+	var sky, grant, ground, hill, hill2;
+	var runningRate, isInWarp, isStationary;
+	var stationaryPosition, isPassed;
+	var itemFood;
+	var messageField;
+	var score = 0;
+	var CANVAS_HEIGHT;
+	var CELL_SIZE = 16;
+	var CANVAS_WIDTH;
+	var GROUND_BUFFER_SIZE = 60; // in terms of cell size
+	var TIMER = 0;
+	var isOver = false;
+	var items = [];
+
+		function init() {
+			score = 0;
+			
+			isOver = false;
+			document.getElementById("start").style.visibility = "hidden";
+			if (window.top != window) {
+				document.getElementById("header").style.display = "none";
+			}
+
+			document.getElementById("loader").className = "loader";
+
+            var canvas = document.getElementById("testCanvas")
+			stage = new createjs.Stage(canvas);
+			CANVAS_HEIGHT = document.getElementById("testCanvas").height;
+			CANVAS_WIDTH = document.getElementById("testCanvas").width;
+
+		//	messageField = new createjs.Text("Game over", "bold 24px Arial", "#000000");
+			
+		//ADDED THIS STUFF
+			initEnergyBar();
+
+			runningRate = 2.5;
+			isInWarp = false;
+			isStationary = false;
+			stationaryPosition = 300;
+			isPassed = false;
+			
+			energyTot = 100;
+
+		    spriteSheet ={"animations": {"run": [0, 25], "jump": [26, 63]}, "images": ["assets/runningGrant.png"], "frames": {"regX": 0, "height": 292.5, "count": 64, "regY": 0, "width": 165.75}};
+
+            var ss = new createjs.SpriteSheet(spriteSheet);
+            grant = new createjs.BitmapAnimation(ss);
+
+
+            // Set up looping
+            ss.getAnimation("run").next = "run";
+            ss.getAnimation("jump").next = "run";
+            grant.gotoAndPlay("run");
+
+            // Position the Grant sprite
+            grant.x = -200;
+            grant.y = 90;
+            grant.scaleX = grant.scaleY = 0.8;
+
+            // grab canvas width and height for later calculations:
+            w = canvas.width;
+            h = canvas.height;
+            ground = new createjs.Container();
+			assets = [];
+
+            manifest = [
+                {src:"assets/runningGrant.png", id:"grant"},
+                {src:"assets/sky-orange.png", id:"sky"},
+                {src:"assets/ground.png", id:"ground"},
+                //{src:"assets/parallaxHill1.png", id:"hill"},
+                //{src:"assets/parallaxHill2.png", id:"hill2"}
+                //{src:"assets/smallCity1.png", id:"hill"},
+                //{src:"assets/smallCity2.png", id:"hill2"}
+                {src:"assets/simpleCity2.png", id:"hill"},
+                {src:"assets/simpleCity1.png", id:"hill2"}
+                
+            ];
+
+            loader = new createjs.LoadQueue(false);
+            loader.onFileLoad = handleFileLoad;
+            loader.onComplete = handleComplete;       
+            loader.loadManifest(manifest);
+            stage.autoClear = false;
+            terrain.init();
+        }
+
+        function awesomeTranslate(x,y){
+        	// (0 0) goes to (0 25)  // 400/16
+        	var newx = x*CELL_SIZE;
+        	var newy = CANVAS_HEIGHT - CELL_SIZE*(1+y);
+        	return {x: newx, y: newy};
+        }
+
+		function handleFileLoad(event) {
+			assets.push(event.item);
+		}
+
+		function handleComplete() {
+			for(var i=0;i<assets.length;i++) {
+				var item = assets[i];
+				var id = item.id;
+				var result = loader.getResult(id);
+
+				if (item.type == createjs.LoadQueue.IMAGE) {
+					var bmp = new createjs.Bitmap(result);
+				}
+
+				switch (id) {
+					case "sky":
+						sky = new createjs.Shape(new createjs.Graphics().beginBitmapFill(result).drawRect(0,0,w,h));
+						break;
+					case "ground":
+						// ground = new createjs.Shape();
+						// var g = ground.graphics;
+						// g.beginBitmapFill(result);
+						// g.drawRect(0, 0, w+330, 79);
+						// ground.y = h-79;
+						break;
+					case "hill":
+						hill = new createjs.Shape(new createjs.Graphics().beginBitmapFill(result).drawRect(0,0,800,400));
+						hill.x = Math.random() * w;
+						hill.scaleX = hill.scaleY = 1;
+						hill.y = 0;
+						break;
+					case "hill2":
+						hill2 = new createjs.Shape(new createjs.Graphics().beginBitmapFill(result).drawRect(0,0,800,400));
+						hill2.x = Math.random() * w;
+						hill2.scaleX = hill2.scaleY = 1;
+						hill2.y = 0;
+						break;
+				}			
+			}
+
+			document.getElementById("loader").className = "";
+
+			if (grant == null) {
+				//console.log("Can not play. Grant sprite was not loaded.");
+				return;
+			}
+
+			stage.addChild(sky, hill, hill2, ground, bar, messageField);
+			items.push(new Item(stage));
+			roshki = new Roshki(stage);
+			roshki.x = 50;
+            roshki.y = h - 210;
+			stage.addEventListener("stagemousedown", handleJumpStart);
+
+            createjs.Ticker.setFPS(40);
+			createjs.Ticker.addEventListener("tick", tick);
+		}
+
+		function handleJumpStart() {
+			grant.gotoAndPlay("jump");
+		}
+
+		function jump() {
+			roshki.jump();
+		}
+
+		 function awesomeTranslate(x,y){
+        	// (0 0) goes to (0 25)  // 400/16
+        	var newx = x*CELL_SIZE;
+        	var newy = CANVAS_HEIGHT - CELL_SIZE*(1+y);
+        	return {x: newx, y: newy};
+        }
+
+
+		function tick(event) {
+			TIMER++;
+			document.getElementById("score").innerHTML = "Score: " + score;
+			if (!isOver && endGame()) {
+				gameOver();
+				isOver = true;
+				document.getElementById("start").style.visibility = "visible";
+
+			} else {
+				if(!isOver) score++;
+			}
+			if(TIMER % 100 == 0){
+				//items.push(new Item(stage));
+			}
+
+			terrain.tick();
+			if (isOver) {
+				for(var i = 0; i < items.length; i++){
+					items[i].remove();
+				}
+				items = [];
+			}
+			for(var i = 0; i < items.length; i++){
+				var itemFood = items[i];
+				if (itemFood.x < -100) {
+					itemFood.remove();
+					items = items.slice(0,i).concat(items.slice(i+1));
+				}
+				if (itemFood != null && itemFood.isColliding(roshki.left(), roshki.right(), roshki.top(), roshki.bot())) {
+
+					//	console.log("colliding");
+						if(itemFood.isGood())
+							changeEnergy(20);
+						else
+							changeEnergy(-20);
+						//itemFood.removeMe();
+						itemFood.remove();
+						itemFood = null;
+						items = items.slice(0,i).concat(items.slice(i+1));
+
+					//	itemFood.icon.visible = false;
+					//	itemFood.remove(stage);
+
+				}
+
+				if (itemFood != null) {
+	        	    itemFood.x -= 8;
+	        	    itemFood.y = itemFood.ground - 25	;
+	        	    itemFood.drawItem();
+	        	}
+			}
+		
+			roshki.draw(stage);
+			var outside = w + 20;
+			var position = grant.x+runningRate;
+			grant.x = (position >= outside) ? -200 : position;
+			
+			// ground.x = (ground.x-15) % 330;			
+			hill.x = (hill.x - 0.8);
+			if (hill.x + 838 <= 0) { hill.x = outside; }
+			hill2.x = (hill2.x - 1.2);
+			if (hill2.x + 633 <= 0) { hill2.x = outside; }
+
+//ADDED THIS STUFF DOWN THERE
+
+            drawEnergyBar();
+
+			stage.update(event);
+		}
+
+		function gameOver(){
+			energyTot = 0;
+			// Create a new Text object, and position it on stage:
+			txt = new createjs.Text("Le Game Over!", "36px Arial", "#1a1a1a");
+			txt.x = 100;
+			txt.y = 80;
+			txt.rotation = 20;
+			//txt.outline = true;
+			stage.addChild(txt);
+
+			// this shape will be the background for the text:
+			shape = new createjs.Shape();
+			shape.x = txt.x;
+			shape.y = txt.y;
+			shape.rotation = txt.rotation;
+			stage.addChildAt(shape,0);
+
+			roshki.isdead = true;
+		}
+
+	</script>
+</head>
+<body onload="init();" onkeydown="jump();">
+
+	<div id="loader"></div>
+
+
+	<div class="canvasHolder">
+		<h2 id="title">Roshki on the Run</h2>
+		<canvas id="testCanvas" width="960" height="400">
+		</canvas>
+		<button id="start" onclick="init();">restart</button>
+		<p id="score"></p>
+	</div>
+
+</body>
+</html>
